@@ -1,5 +1,7 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { playwright } from '@vitest/browser-playwright'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -10,4 +12,13 @@ export default defineConfig({
       },
     }),
   ],
+  test: {
+    browser: {
+      enabled: true,
+      provider: playwright(),
+      instances: [
+        { browser: "chromium" }
+      ]
+    }
+  }
 })
