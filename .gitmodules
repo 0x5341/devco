@@ -1,0 +1,3 @@
+[submodule "docs/godev"]
+	path = docs/godev
+	url = https://github.com/0x5341/godev.git
