@@ -1,14 +1,14 @@
 /// <reference types="vitest/config" />
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import { playwright } from '@vitest/browser-playwright'
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { playwright } from "@vitest/browser-playwright";
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
     react({
       babel: {
-        plugins: [['babel-plugin-react-compiler']],
+        plugins: [["babel-plugin-react-compiler"]],
       },
     }),
   ],
@@ -16,9 +16,7 @@ export default defineConfig({
     browser: {
       enabled: true,
       provider: playwright(),
-      instances: [
-        { browser: "chromium" }
-      ]
-    }
-  }
-})
+      instances: [{ browser: "chromium" }],
+    },
+  },
+});
