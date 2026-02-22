@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"path"
 )
 
 func setup(datadir string) error {
@@ -9,10 +10,19 @@ func setup(datadir string) error {
 	if err != nil {
 		return err
 	}
+
+	file, err := os.Create(path.Join(datadir, "projects.json"))
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	file.WriteString(`{}`)
+
 	return nil
 }
 
 func needSetup(datadir string) bool {
 	_, err := os.Stat(datadir)
-	return err == nil
+	return err != nil
 }
