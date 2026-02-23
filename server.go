@@ -83,6 +83,33 @@ func serveAPI(datadir string) {
 
 		w.WriteHeader(http.StatusOK)
 	})
+
+	http.HandleFunc("DELETE /api/project", func(w http.ResponseWriter, r *http.Request) {
+		if !r.URL.Query().Has("pjname") {
+			errPrint(w, http.StatusBadRequest, "error get pjname")
+			return
+		}
+		pjname := r.URL.Query().Get("pjname")
+
+		json, ok := loadProjectsJson(datadir, w)
+		if !ok {
+			return
+		}
+
+		if _, ok = json[pjname]; !ok {
+			errPrint(w, http.StatusBadRequest, "error project `%s` is not found", pjname)
+			return
+		}
+
+		delete(json, pjname)
+
+		ok = writeProjectsJson(datadir, json, w)
+		if !ok {
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+	})
 }
 
 func loadProjectsJsonRaw(datadir string, w http.ResponseWriter) ([]byte, bool) {
