@@ -11,6 +11,11 @@ func setup(datadir string) error {
 		return err
 	}
 
+	err = os.MkdirAll(path.Join(datadir, "worktree"), os.ModePerm)
+	if err != nil {
+		return err
+	}
+
 	file, err := os.Create(path.Join(datadir, "projects.json"))
 	if err != nil {
 		return err

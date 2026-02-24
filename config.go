@@ -9,6 +9,7 @@ type projectsJsonProject struct {
 
 type projectsJsonWorkspace struct {
 	State       workspaceState
+	BranchName  string
 	ContainerId string
 }
 

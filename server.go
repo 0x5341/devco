@@ -1,13 +1,10 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
-	"os"
-	"path"
 	"strings"
 )
 
@@ -36,6 +33,7 @@ func serveUI() {
 
 func serveAPI(datadir string) {
 	serveProjectAPI(datadir)
+	serveWorkspaceAPI(datadir)
 }
 
 func errPrint(w http.ResponseWriter, code int, fmtstr string, v ...any) {
