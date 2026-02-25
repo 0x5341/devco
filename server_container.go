@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/0x5341/devco/devcontainer"
@@ -88,33 +89,11 @@ func serveDownContainerAPI(datadir string) {
 			return
 		}
 
-		if _, ok = js[c.ProjectName]; !ok {
-			errPrint(w, http.StatusBadRequest, "error project `%s` not exists", c.ProjectName)
-			return
-		}
-
-		if _, ok = js[c.ProjectName].Workspaces[c.WorkspaceName]; !ok {
-			errPrint(w, http.StatusBadRequest, "error workspace `%s` not exists in project `%s`", c.WorkspaceName, c.ProjectName)
-			return
-		}
-
-		if js[c.ProjectName].Workspaces[c.WorkspaceName].State != stateRunning {
-			errPrint(w, http.StatusBadRequest, "error container already stopped in workspace `%s`", c.WorkspaceName)
-			return
-		}
-
-		err = devcontainer.Down(devcontainer.DownConfig{
-			ComposeProjectName: js[c.ProjectName].Workspaces[c.WorkspaceName].ComposeProjectName,
-			ContainerId:        js[c.ProjectName].Workspaces[c.WorkspaceName].ContainerId,
-		})
+		err = downContainer(&js, c.ProjectName, c.WorkspaceName)
 		if err != nil {
-			errPrint(w, http.StatusInternalServerError, "error stop container: %s", err)
+			errPrint(w, http.StatusNotFound, "error during down container: %s", err)
 			return
 		}
-
-		ws := js[c.ProjectName].Workspaces[c.WorkspaceName]
-		ws.State = stateBeforeStart
-		js[c.ProjectName].Workspaces[c.WorkspaceName] = ws
 
 		ok = writeProjectsJson(datadir, js, w)
 		if !ok {
@@ -123,4 +102,32 @@ func serveDownContainerAPI(datadir string) {
 
 		w.WriteHeader(http.StatusOK)
 	})
+}
+
+func downContainer(js *projectsJson, pjname string, wsname string) error {
+	if _, ok := (*js)[pjname]; !ok {
+		return fmt.Errorf("project `%s` not exists", pjname)
+	}
+
+	if _, ok := (*js)[pjname].Workspaces[wsname]; !ok {
+		return fmt.Errorf("workspace `%s` not exists in project `%s`", wsname, pjname)
+	}
+
+	if (*js)[pjname].Workspaces[wsname].State != stateRunning {
+		return fmt.Errorf("container already stopped in workspace `%s`", wsname)
+	}
+
+	err := devcontainer.Down(devcontainer.DownConfig{
+		ComposeProjectName: (*js)[pjname].Workspaces[wsname].ComposeProjectName,
+		ContainerId:        (*js)[pjname].Workspaces[wsname].ContainerId,
+	})
+	if err != nil {
+		return fmt.Errorf("error stop container: %s", err)
+	}
+
+	ws := (*js)[pjname].Workspaces[wsname]
+	ws.State = stateBeforeStart
+	(*js)[pjname].Workspaces[wsname] = ws
+
+	return nil
 }
