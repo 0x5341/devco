@@ -34,6 +34,7 @@ func serveUI() {
 func serveAPI(datadir string) {
 	serveProjectAPI(datadir)
 	serveWorkspaceAPI(datadir)
+	serveContainerAPI(datadir)
 }
 
 func errPrint(w http.ResponseWriter, code int, fmtstr string, v ...any) {

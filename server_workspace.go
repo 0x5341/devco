@@ -61,6 +61,7 @@ func servePostWorkspaceAPI(datadir string) {
 		js[c.ProjectName].Workspaces[c.WorkspaceName] = projectsJsonWorkspace{
 			State:       stateBeforeStart,
 			BranchName:  branchName,
+			Path:        path.Join(pjwpath, c.WorkspaceName),
 			ContainerId: "",
 		}
 

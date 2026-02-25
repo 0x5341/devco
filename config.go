@@ -8,9 +8,15 @@ type projectsJsonProject struct {
 }
 
 type projectsJsonWorkspace struct {
-	State       workspaceState
-	BranchName  string
-	ContainerId string
+	State      workspaceState
+	BranchName string
+	Path       string
+
+	ContainerId        string
+	ComposeProjectName string
+
+	RemoteUser            string
+	RemoteWorkspaceFolder string
 }
 
 type workspaceState string
