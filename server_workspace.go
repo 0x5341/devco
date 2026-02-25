@@ -113,6 +113,7 @@ func serveDeleteWorkspaceAPI(datadir string) {
 		err = exec.Command("git", "-C", js[pjname].Path, "branch", "-d", js[pjname].Workspaces[wsname].BranchName).Run()
 		if err != nil {
 			errPrint(w, http.StatusInternalServerError, "error remove branch `%s`: %s", js[pjname].Workspaces[wsname].BranchName, err)
+			return
 		}
 
 		delete(js[pjname].Workspaces, wsname)
