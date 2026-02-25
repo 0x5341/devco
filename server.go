@@ -1,19 +1,45 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
 	"strings"
+	"time"
 )
 
 func serve(addr string, datadir string) {
 	serveUI()
 	serveAPI(datadir)
-	if err := http.ListenAndServe(addr, nil); err != nil {
-		log.Fatalf("serve error: %s", err)
+
+	sig, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	server := &http.Server{
+		Addr:    addr,
+		Handler: nil,
 	}
+
+	go func() {
+		if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("serve error: %s", err)
+		}
+	}()
+	<-sig.Done()
+
+	log.Printf("start graceful shutdown...")
+
+	timeout, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	server.Shutdown(timeout)
+
+	log.Printf("finished graceful shutdown")
 }
 
 func serveUI() {
