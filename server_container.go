@@ -2,8 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"os/exec"
 
 	"github.com/0x5341/devco/devcontainer"
 )
@@ -60,6 +62,12 @@ func serveLaunchContainerAPI(datadir string) {
 		ws.ContainerId = res.ContainerId
 		ws.RemoteUser = res.RemoteUser
 		ws.RemoteWorkspaceFolder = res.RemoteWorkspaceFolder
+		addr, err := getIPAddress(res.ContainerId)
+		if err != nil {
+			errPrint(w, http.StatusInternalServerError, "error get IPAddress: %s", err)
+			return
+		}
+		ws.IPAddress = addr
 		js[c.ProjectName].Workspaces[c.WorkspaceName] = ws
 
 		ok = writeProjectsJson(datadir, js, w)
@@ -130,4 +138,32 @@ func downContainer(js *projectsJson, pjname string, wsname string) error {
 	(*js)[pjname].Workspaces[wsname] = ws
 
 	return nil
+}
+
+func getIPAddress(cid string) (string, error) {
+	b, err := exec.Command("docker", "inspect", cid).Output()
+	if err != nil {
+		return "", err
+	}
+
+	type info []struct {
+		NetworkSettings struct {
+			Networks map[string]struct {
+				IPAddress string
+			}
+		}
+	}
+
+	var i info
+	err = json.Unmarshal(b, &i)
+	if err != nil {
+		return "", err
+	}
+
+	for _, net := range i[0].NetworkSettings.Networks {
+		addr := net.IPAddress
+		return addr, nil
+	}
+
+	return "", errors.New("IPAddress not found")
 }

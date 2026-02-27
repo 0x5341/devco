@@ -17,6 +17,8 @@ type projectsJsonWorkspace struct {
 
 	RemoteUser            string
 	RemoteWorkspaceFolder string
+
+	IPAddress string
 }
 
 type workspaceState string

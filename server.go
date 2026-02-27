@@ -15,8 +15,8 @@ import (
 )
 
 func serve(addr string, datadir string) {
-	serveUI()
 	serveAPI(datadir)
+	serveUI()
 
 	sig, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
@@ -91,7 +91,7 @@ func serve(addr string, datadir string) {
 
 func serveUI() {
 	server := http.FileServerFS(dist)
-	http.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" {
 			server.ServeHTTP(w, r)
 			return
@@ -108,6 +108,7 @@ func serveAPI(datadir string) {
 	serveProjectAPI(datadir)
 	serveWorkspaceAPI(datadir)
 	serveContainerAPI(datadir)
+	servePortAccessAPI(datadir)
 }
 
 func errPrint(w http.ResponseWriter, code int, fmtstr string, v ...any) {
