@@ -104,6 +104,14 @@ func serveDeleteWorkspaceAPI(datadir string) {
 			return
 		}
 
+		if js[pjname].Workspaces[wsname].State == stateRunning {
+			err := downContainer(&js, pjname, wsname)
+			if err != nil {
+				errPrint(w, http.StatusInternalServerError, "error failed to down container in workspace `%s` in project `%s`: %s", wsname, pjname, err)
+				return
+			}
+		}
+
 		err := exec.Command("git", "-C", js[pjname].Path, "worktree", "remove", "-f", path.Join(datadir, "worktree", pjname, wsname)).Run()
 		if err != nil {
 			errPrint(w, http.StatusInternalServerError, "error remove worktree: %s", err)
