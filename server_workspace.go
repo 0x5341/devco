@@ -28,7 +28,7 @@ func servePostWorkspaceAPI(datadir string) {
 			return
 		}
 
-		js, ok := loadProjectsJson(datadir, w)
+		js, ok := jsonHelper[projectsJson](w)(loadProjectsJson(datadir))
 		if !ok {
 			return
 		}
@@ -65,7 +65,7 @@ func servePostWorkspaceAPI(datadir string) {
 			ContainerId: "",
 		}
 
-		ok = writeProjectsJson(datadir, js, w)
+		_, ok = jsonHelper[struct{}](w)(writeProjectsJson(datadir, js))
 		if !ok {
 			return
 		}
@@ -89,7 +89,7 @@ func serveDeleteWorkspaceAPI(datadir string) {
 		pjname := r.URL.Query().Get("pjname")
 		wsname := r.URL.Query().Get("wsname")
 
-		js, ok := loadProjectsJson(datadir, w)
+		js, ok := jsonHelper[projectsJson](w)(loadProjectsJson(datadir))
 		if !ok {
 			return
 		}
@@ -126,7 +126,7 @@ func serveDeleteWorkspaceAPI(datadir string) {
 
 		delete(js[pjname].Workspaces, wsname)
 
-		ok = writeProjectsJson(datadir, js, w)
+		_, ok = jsonHelper[struct{}](w)(writeProjectsJson(datadir, js))
 		if !ok {
 			return
 		}

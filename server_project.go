@@ -3,8 +3,6 @@ package main
 import (
 	"encoding/json"
 	"net/http"
-	"os"
-	"path"
 )
 
 func serveProjectAPI(datadir string) {
@@ -15,7 +13,7 @@ func serveProjectAPI(datadir string) {
 
 func serveGetProjectAPI(datadir string) {
 	http.HandleFunc("GET /api/project", func(w http.ResponseWriter, r *http.Request) {
-		file, ok := loadProjectsJsonRaw(datadir, w)
+		file, ok := jsonHelper[[]byte](w)(loadProjectsJsonRaw(datadir))
 		if !ok {
 			return
 		}
@@ -42,7 +40,7 @@ func servePostProjectAPI(datadir string) {
 			return
 		}
 
-		file, ok := loadProjectsJson(datadir, w)
+		file, ok := jsonHelper[projectsJson](w)(loadProjectsJson(datadir))
 		if !ok {
 			return
 		}
@@ -57,7 +55,7 @@ func servePostProjectAPI(datadir string) {
 			Workspaces: map[string]projectsJsonWorkspace{},
 		}
 
-		ok = writeProjectsJson(datadir, file, w)
+		_, ok = jsonHelper[struct{}](w)(writeProjectsJson(datadir, file))
 		if !ok {
 			return
 		}
@@ -74,7 +72,7 @@ func serveDeleteProjectAPI(datadir string) {
 		}
 		pjname := r.URL.Query().Get("pjname")
 
-		json, ok := loadProjectsJson(datadir, w)
+		json, ok := jsonHelper[projectsJson](w)(loadProjectsJson(datadir))
 		if !ok {
 			return
 		}
@@ -86,52 +84,11 @@ func serveDeleteProjectAPI(datadir string) {
 
 		delete(json, pjname)
 
-		ok = writeProjectsJson(datadir, json, w)
+		_, ok = jsonHelper[struct{}](w)(writeProjectsJson(datadir, json))
 		if !ok {
 			return
 		}
 
 		w.WriteHeader(http.StatusOK)
 	})
-}
-
-func loadProjectsJsonRaw(datadir string, w http.ResponseWriter) ([]byte, bool) {
-	pjpath := path.Join(datadir, "projects.json")
-	file, err := os.ReadFile(pjpath)
-	if err != nil {
-		errPrint(w, http.StatusInternalServerError, "error read projects.json: %s", err)
-		return nil, false
-	}
-	return file, true
-}
-
-func loadProjectsJson(datadir string, w http.ResponseWriter) (projectsJson, bool) {
-	file, ok := loadProjectsJsonRaw(datadir, w)
-	if !ok {
-		return projectsJson{}, false
-	}
-
-	var j projectsJson
-	err := json.Unmarshal(file, &j)
-	if err != nil {
-		errPrint(w, http.StatusInternalServerError, "error decode projects.json: %s", err)
-		return projectsJson{}, false
-	}
-
-	return j, true
-}
-
-func writeProjectsJson(datadir string, data projectsJson, w http.ResponseWriter) bool {
-	j, err := json.Marshal(data)
-	if err != nil {
-		errPrint(w, http.StatusInternalServerError, "error encode projects.json: %s", err)
-		return false
-	}
-
-	err = os.WriteFile(path.Join(datadir, "projects.json"), j, os.ModePerm)
-	if err != nil {
-		errPrint(w, http.StatusInternalServerError, "error write projects.json: %s", err)
-		return false
-	}
-	return true
 }

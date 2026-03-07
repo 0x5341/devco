@@ -9,7 +9,7 @@ import (
 
 func servePortAccessAPI(datadir string) {
 	http.HandleFunc("/port/{pid}/{wid}/{port}/{rest...}", func(w http.ResponseWriter, r *http.Request) {
-		js, ok := loadProjectsJson(datadir, w)
+		js, ok := jsonHelper[projectsJson](w)(loadProjectsJson(datadir))
 		if !ok {
 			return
 		}

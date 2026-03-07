@@ -28,7 +28,7 @@ func serveLaunchContainerAPI(datadir string) {
 			return
 		}
 
-		js, ok := loadProjectsJson(datadir, w)
+		js, ok := jsonHelper[projectsJson](w)(loadProjectsJson(datadir))
 		if !ok {
 			return
 		}
@@ -70,7 +70,7 @@ func serveLaunchContainerAPI(datadir string) {
 		ws.IPAddress = addr
 		js[c.ProjectName].Workspaces[c.WorkspaceName] = ws
 
-		ok = writeProjectsJson(datadir, js, w)
+		_, ok = jsonHelper[struct{}](w)(writeProjectsJson(datadir, js))
 		if !ok {
 			return
 		}
@@ -92,7 +92,7 @@ func serveDownContainerAPI(datadir string) {
 			return
 		}
 
-		js, ok := loadProjectsJson(datadir, w)
+		js, ok := jsonHelper[projectsJson](w)(loadProjectsJson(datadir))
 		if !ok {
 			return
 		}
@@ -103,7 +103,7 @@ func serveDownContainerAPI(datadir string) {
 			return
 		}
 
-		ok = writeProjectsJson(datadir, js, w)
+		_, ok = jsonHelper[struct{}](w)(writeProjectsJson(datadir, js))
 		if !ok {
 			return
 		}
