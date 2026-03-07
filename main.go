@@ -19,6 +19,7 @@ var rootCmd = &cobra.Command{
 
 var address string
 var data_dir string
+var config_path string
 
 func init() {
 	xdg_data := os.Getenv("XDG_DATA_HOME")
@@ -27,15 +28,32 @@ func init() {
 		if err != nil {
 			log.Fatalf("cannot get user home directory: %s", err)
 		}
-		xdg_data = path.Join(home, ".local/share/devco")
+		xdg_data = path.Join(home, ".local/share")
 	}
+	data_dir_default := path.Join(xdg_data, "devco")
+
+	xdg_config := os.Getenv("XDG_CONFIG_HOME")
+	if xdg_config == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			log.Fatalf("cannot get user home directory: %s", err)
+		}
+		xdg_config = path.Join(home, ".config")
+	}
+	config_path_default := path.Join(xdg_config, "devco/config.json")
 
 	rootCmd.Flags().StringVarP(&address, "address", "a", ":8000", "address that serve server")
-	rootCmd.Flags().StringVar(&data_dir, "datadir", xdg_data, "address that serve server")
+	rootCmd.Flags().StringVar(&data_dir, "datadir", data_dir_default, "directory that save data")
+	rootCmd.Flags().StringVarP(&config_path, "config", "c", config_path_default, "path to the config file")
 
 	cobra.OnInitialize(func() {
+		// check config file
+		if !exist(config_path) {
+			log.Fatalf("config file `%s` is not exist", config_path)
+		}
+
 		log.Println("start initialize")
-		if needSetup(data_dir) {
+		if !exist(data_dir) {
 			log.Println("setup required")
 			err := setup(data_dir)
 			if err != nil {
