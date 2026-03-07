@@ -1,30 +1,12 @@
 package main
 
-type projectsJson map[string]projectsJsonProject
-
-type projectsJsonProject struct {
-	Path       string
-	Workspaces map[string]projectsJsonWorkspace
+type config struct {
+	Plugins []plugin
 }
 
-type projectsJsonWorkspace struct {
-	State      workspaceState
-	BranchName string
-	Path       string
-
-	ContainerId        string
-	ComposeProjectName string
-
-	RemoteUser            string
-	RemoteWorkspaceFolder string
-
-	IPAddress string
+type plugin struct {
+	Name     string
+	Features map[string]map[string]any // bool or string
+	Port     int                       // 0 means "not need open button"
+	Path     string
 }
-
-type workspaceState string
-
-const (
-	stateBeforeStart workspaceState = "beforeStart"
-	stateRunning     workspaceState = "running"
-	stateStopped     workspaceState = "stopped"
-)
