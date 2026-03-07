@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
 	"os"
 	"path"
@@ -20,6 +21,8 @@ var rootCmd = &cobra.Command{
 var address string
 var data_dir string
 var config_path string
+
+var conf config
 
 func init() {
 	xdg_data := os.Getenv("XDG_DATA_HOME")
@@ -48,8 +51,20 @@ func init() {
 
 	cobra.OnInitialize(func() {
 		// check config file
-		if !exist(config_path) {
+		if !exist(config_path) && config_path != config_path_default {
 			log.Fatalf("config file `%s` is not exist", config_path)
+		}
+
+		if exist(config_path) {
+			file, err := os.ReadFile(config_path)
+			if err != nil {
+				log.Fatalf("failed to read config file: %s", err)
+			}
+
+			err = json.Unmarshal(file, &conf)
+			if err != nil {
+				log.Fatalf("failed to parse config file: %s", err)
+			}
 		}
 
 		log.Println("start initialize")
