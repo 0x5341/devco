@@ -29,17 +29,9 @@ func serve(addr string, datadir string) {
 	ch := make(chan struct{})
 
 	server.RegisterOnShutdown(func() {
-		jsonpath := path.Join(datadir, "projects.json")
-		file, err := os.ReadFile(jsonpath)
+		js, err := loadProjectsJson(datadir)
 		if err != nil {
-			log.Printf("failed shutdown (fail to read projects.json): %s", err)
-			return
-		}
-
-		var js projectsJson
-		err = json.Unmarshal(file, &js)
-		if err != nil {
-			log.Printf("failed shutdown (fail to parse projects.json): %s", err)
+			log.Printf("failed to shutdown: %s", err)
 			return
 		}
 
@@ -56,15 +48,9 @@ func serve(addr string, datadir string) {
 			}
 		}
 
-		b, err := json.Marshal(js)
+		_, err = writeProjectsJson(datadir, js)
 		if err != nil {
-			log.Printf("failed shutdown (fail to marshal json): %s", err)
-			return
-		}
-
-		err = os.WriteFile(jsonpath, b, os.ModePerm)
-		if err != nil {
-			log.Printf("failed shutdown (fail to write projects.json): %s", err)
+			log.Printf("failed to shutdown: %s", err)
 			return
 		}
 
