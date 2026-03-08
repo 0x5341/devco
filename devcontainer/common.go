@@ -18,9 +18,3 @@ const (
 	BindMount MountType = iota
 	VolumeMount
 )
-
-type FeatureConfig struct {
-	Id            string
-	StringOptions map[string]string
-	BoolOptions   map[string]bool
-}

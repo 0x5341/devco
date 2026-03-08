@@ -1,13 +1,12 @@
 package main
 
 type config struct {
-	Plugins []plugin
+	Plugins map[string]plugin
 }
 
 type plugin struct {
-	Name     string
 	Features map[string]map[string]any // bool or string
-	Links    []link
+	Links    map[string]link
 }
 
 type link struct {

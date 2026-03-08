@@ -26,7 +26,7 @@ type UpConfig struct {
 	// additional mounts
 	AdditionalMounts []MountConfig
 	// additional features
-	AdditionalFeatures []FeatureConfig
+	AdditionalFeatures map[string]map[string]any
 }
 
 type UpResult struct {
@@ -96,18 +96,7 @@ func buildUpOption(c UpConfig) (r []string) {
 	}
 
 	if c.AdditionalFeatures != nil {
-		m := make(map[string]map[string]any)
-		for _, f := range c.AdditionalFeatures {
-			o := make(map[string]any)
-			for k, v := range f.StringOptions {
-				o[k] = v
-			}
-			for k, v := range f.BoolOptions {
-				o[k] = v
-			}
-			m[f.Id] = o
-		}
-		js, err := json.Marshal(m)
+		js, err := json.Marshal(c.AdditionalFeatures)
 		if err != nil {
 			panic(fmt.Sprintf("internal json marshal error: %s", err))
 		}

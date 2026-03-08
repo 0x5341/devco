@@ -19,6 +19,8 @@ type projectsJsonWorkspace struct {
 	RemoteWorkspaceFolder string
 
 	IPAddress string
+
+	OpenLinks map[string]link
 }
 
 type workspaceState string

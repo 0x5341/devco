@@ -14,7 +14,7 @@ var rootCmd = &cobra.Command{
 	Short: "devco, local codespace",
 	Run: func(cmd *cobra.Command, args []string) {
 		log.Printf("started on %s", address)
-		serve(address, data_dir)
+		serve(address, data_dir, conf)
 	},
 }
 

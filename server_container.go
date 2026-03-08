@@ -4,21 +4,24 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"os/exec"
 
 	"github.com/0x5341/devco/devcontainer"
 )
 
-func serveContainerAPI(datadir string) {
-	serveLaunchContainerAPI(datadir)
+func serveContainerAPI(datadir string, conf config) {
+	serveLaunchContainerAPI(datadir, conf)
 	serveDownContainerAPI(datadir)
+	serveGetOpenLinksAPI(datadir)
 }
 
-func serveLaunchContainerAPI(datadir string) {
+func serveLaunchContainerAPI(datadir string, cf config) {
 	type conf struct {
 		ProjectName   string
 		WorkspaceName string
+		Plugins       []string
 	}
 	http.HandleFunc("POST /api/workspace/launch", func(w http.ResponseWriter, r *http.Request) {
 		var c conf
@@ -48,8 +51,21 @@ func serveLaunchContainerAPI(datadir string) {
 			return
 		}
 
+		for _, s := range c.Plugins {
+			if _, ok := cf.Plugins[s]; !ok {
+				errPrint(w, http.StatusBadRequest, "error plugin `%s` is not exist", s)
+				return
+			}
+		}
+
+		features := make(map[string]map[string]any)
+		for _, name := range c.Plugins {
+			maps.Copy(features, cf.Plugins[name].Features)
+		}
+
 		res, err := devcontainer.Up(devcontainer.UpConfig{
-			WorkspaceFolder: js[c.ProjectName].Workspaces[c.WorkspaceName].Path,
+			WorkspaceFolder:    js[c.ProjectName].Workspaces[c.WorkspaceName].Path,
+			AdditionalFeatures: features,
 		})
 		if err != nil {
 			errPrint(w, http.StatusInternalServerError, "error launch container: %s", err)
@@ -62,6 +78,12 @@ func serveLaunchContainerAPI(datadir string) {
 		ws.ContainerId = res.ContainerId
 		ws.RemoteUser = res.RemoteUser
 		ws.RemoteWorkspaceFolder = res.RemoteWorkspaceFolder
+
+		ws.OpenLinks = make(map[string]link)
+		for _, name := range c.Plugins {
+			maps.Copy(ws.OpenLinks, cf.Plugins[name].Links)
+		}
+
 		addr, err := getIPAddress(res.ContainerId)
 		if err != nil {
 			errPrint(w, http.StatusInternalServerError, "error get IPAddress: %s", err)
@@ -109,6 +131,56 @@ func serveDownContainerAPI(datadir string) {
 		}
 
 		w.WriteHeader(http.StatusOK)
+	})
+}
+
+func serveGetOpenLinksAPI(datadir string) {
+	http.HandleFunc("GET /api/workspace/openlink", func(w http.ResponseWriter, r *http.Request) {
+		checkParam := func(name string) bool {
+			if !r.URL.Query().Has(name) {
+				errPrint(w, http.StatusBadRequest, "error paramater `%s` is not exist", name)
+				return false
+			}
+			return true
+		}
+
+		for _, p := range []string{"pjname", "wsname"} {
+			if !checkParam(p) {
+				return
+			}
+		}
+
+		pjname := r.URL.Query().Get("pjname")
+		wsname := r.URL.Query().Get("wsname")
+
+		js, ok := jsonHelper[projectsJson](w)(loadProjectsJson(datadir))
+		if !ok {
+			return
+		}
+
+		if _, ok := js[pjname]; !ok {
+			errPrint(w, http.StatusBadRequest, "error project `%s` is not exist", pjname)
+			return
+		}
+
+		if _, ok := js[pjname].Workspaces[wsname]; !ok {
+			errPrint(w, http.StatusBadRequest, "error workspace `%s` is not exist in project `%s`", wsname, pjname)
+			return
+		}
+
+		if js[pjname].Workspaces[wsname].State != stateRunning {
+			errPrint(w, http.StatusBadRequest, "error workspace `%s` is not running", wsname)
+		}
+
+		links := js[pjname].Workspaces[wsname].OpenLinks
+
+		b, err := json.Marshal(links)
+		if err != nil {
+			errPrint(w, http.StatusInternalServerError, "error encode openlink")
+			return
+		}
+
+		w.Write(b)
 	})
 }
 

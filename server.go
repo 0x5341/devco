@@ -12,8 +12,8 @@ import (
 	"strings"
 )
 
-func serve(addr string, datadir string) {
-	serveAPI(datadir)
+func serve(addr string, datadir string, conf config) {
+	serveAPI(datadir, conf)
 	serveUI()
 
 	sig, stop := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -88,10 +88,10 @@ func serveUI() {
 	})
 }
 
-func serveAPI(datadir string) {
+func serveAPI(datadir string, conf config) {
 	serveProjectAPI(datadir)
 	serveWorkspaceAPI(datadir)
-	serveContainerAPI(datadir)
+	serveContainerAPI(datadir, conf)
 	servePortAccessAPI(datadir)
 }
 
