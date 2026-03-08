@@ -29,5 +29,5 @@ func setup(datadir string) error {
 
 func exist(path string) bool {
 	_, err := os.Stat(path)
-	return err != nil
+	return err == nil
 }
