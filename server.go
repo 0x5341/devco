@@ -89,6 +89,7 @@ func serveUI() {
 }
 
 func serveAPI(datadir string, conf config) {
+	serveConfigAPI(conf)
 	serveProjectAPI(datadir)
 	serveWorkspaceAPI(datadir)
 	serveContainerAPI(datadir, conf)
