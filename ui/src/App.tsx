@@ -16,11 +16,19 @@ import {
   deleteProject,
   deleteWorkspace,
   downWorkspaceContainer,
+  fetchConfig,
   fetchProjects,
+  fetchWorkspaceOpenLinks,
   launchWorkspaceContainer,
 } from "./lib/api";
 import { findProject, findWorkspace, toProjectList, toWorkspaceList } from "./lib/project-data";
 import type { ProjectsMap, Workspace } from "./lib/types";
+import {
+  getRenderableOpenLinks,
+  parseWorkspacePluginSelectionCookie,
+  serializeWorkspacePluginSelectionCookie,
+  type RenderableOpenLink,
+} from "./lib/workspace-launch";
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -691,8 +699,87 @@ function WorkspaceDetailPage() {
   const { projects, loading, error, setError, reload } = useProjectsData();
   const [submitting, setSubmitting] = useState(false);
   const [isRemoveDialogOpen, setRemoveDialogOpen] = useState(false);
+  const [isLaunchDialogOpen, setLaunchDialogOpen] = useState(false);
+  const [availablePlugins, setAvailablePlugins] = useState<string[]>([]);
+  const [selectedPlugins, setSelectedPlugins] = useState<string[]>([]);
+  const [loadingPlugins, setLoadingPlugins] = useState(false);
+  const [openLinks, setOpenLinks] = useState<RenderableOpenLink[]>([]);
   const navigate = useNavigate();
   const workspace = findWorkspace(projects, projectName, workspaceName);
+  const currentProjectName = projectName ?? "";
+  const currentWorkspaceName = workspaceName ?? "";
+  const isRunning = workspace?.State === "running";
+
+  useEffect(() => {
+    let ignore = false;
+
+    if (!isRunning || !currentProjectName || !currentWorkspaceName) {
+      setOpenLinks([]);
+      return;
+    }
+
+    void fetchWorkspaceOpenLinks({
+      projectName: currentProjectName,
+      workspaceName: currentWorkspaceName,
+    })
+      .then((links) => {
+        if (ignore) {
+          return;
+        }
+        setOpenLinks(getRenderableOpenLinks(window.location.origin, currentProjectName, currentWorkspaceName, links));
+      })
+      .catch((error) => {
+        if (ignore) {
+          return;
+        }
+        setOpenLinks([]);
+        setError(getErrorMessage(error));
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [currentProjectName, currentWorkspaceName, isRunning, setError]);
+
+  useEffect(() => {
+    if (!isLaunchDialogOpen || !currentProjectName || !currentWorkspaceName) {
+      return;
+    }
+
+    let ignore = false;
+    const persistedSelection = parseWorkspacePluginSelectionCookie(document.cookie, currentProjectName, currentWorkspaceName);
+
+    setAvailablePlugins([]);
+    setSelectedPlugins(persistedSelection);
+    setLoadingPlugins(true);
+
+    void fetchConfig()
+      .then((config) => {
+        if (ignore) {
+          return;
+        }
+        const pluginNames = Object.keys(config.Plugins).sort((left, right) => left.localeCompare(right));
+        setAvailablePlugins(pluginNames);
+        setSelectedPlugins(persistedSelection.filter((pluginName) => pluginNames.includes(pluginName)));
+      })
+      .catch((error) => {
+        if (ignore) {
+          return;
+        }
+        setAvailablePlugins([]);
+        setError(getErrorMessage(error));
+      })
+      .finally(() => {
+        if (ignore) {
+          return;
+        }
+        setLoadingPlugins(false);
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [currentProjectName, currentWorkspaceName, isLaunchDialogOpen, setError]);
 
   async function withAction(action: () => Promise<void>) {
     setSubmitting(true);
@@ -704,6 +791,15 @@ function WorkspaceDetailPage() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function togglePlugin(pluginName: string) {
+    setSelectedPlugins((current) => {
+      const next = current.includes(pluginName)
+        ? current.filter((name) => name !== pluginName)
+        : [...current, pluginName];
+      return next.sort((left, right) => left.localeCompare(right));
+    });
   }
 
   if (loading && !workspace) {
@@ -725,22 +821,41 @@ function WorkspaceDetailPage() {
     );
   }
 
-  const currentProjectName = projectName;
-  const currentWorkspaceName = workspaceName;
-  const isRunning = workspace.State === "running";
   const containerActionLabel = isRunning ? "Container Down" : "Container Launch";
   const containerActionClass = isRunning
     ? "bg-amber-600 disabled:bg-amber-300"
     : "bg-emerald-600 disabled:bg-emerald-300";
 
   async function onContainerAction() {
+    if (!isRunning) {
+      setLaunchDialogOpen(true);
+      return;
+    }
+
     await withAction(async () => {
-      if (isRunning) {
-        await downWorkspaceContainer({ projectName: currentProjectName, workspaceName: currentWorkspaceName });
-        return;
-      }
-      await launchWorkspaceContainer({ projectName: currentProjectName, workspaceName: currentWorkspaceName });
+      await downWorkspaceContainer({ projectName: currentProjectName, workspaceName: currentWorkspaceName });
     });
+  }
+
+  async function onLaunchWorkspace(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const launchPlugins = selectedPlugins.filter((pluginName) => availablePlugins.includes(pluginName));
+    document.cookie = serializeWorkspacePluginSelectionCookie(currentProjectName, currentWorkspaceName, launchPlugins);
+
+    let launched = false;
+    await withAction(async () => {
+      await launchWorkspaceContainer({
+        projectName: currentProjectName,
+        workspaceName: currentWorkspaceName,
+        plugins: launchPlugins,
+      });
+      launched = true;
+    });
+
+    if (launched) {
+      setLaunchDialogOpen(false);
+    }
   }
 
   async function onRemoveWorkspace() {
@@ -784,6 +899,48 @@ function WorkspaceDetailPage() {
           </button>
         </div>
       </Modal>
+      <Modal onClose={() => setLaunchDialogOpen(false)} open={isLaunchDialogOpen} title="Launch container">
+        <form className="space-y-4" onSubmit={onLaunchWorkspace}>
+          <div className="space-y-2">
+            <p className="text-sm text-slate-700">Select plugins to enable for this workspace launch.</p>
+            {loadingPlugins ? (
+              <p className="text-sm text-slate-600">Loading plugins...</p>
+            ) : availablePlugins.length === 0 ? (
+              <p className="text-sm text-slate-600">No plugins available.</p>
+            ) : (
+              <div className="space-y-2">
+                {availablePlugins.map((pluginName) => (
+                  <label className="flex items-center gap-2 text-sm text-slate-700" key={pluginName}>
+                    <input
+                      checked={selectedPlugins.includes(pluginName)}
+                      className="h-4 w-4 rounded border-slate-300"
+                      onChange={() => togglePlugin(pluginName)}
+                      type="checkbox"
+                    />
+                    <span>{pluginName}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+              onClick={() => setLaunchDialogOpen(false)}
+              type="button"
+            >
+              Cancel
+            </button>
+            <button
+              className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-emerald-300"
+              disabled={submitting || loadingPlugins}
+              type="submit"
+            >
+              Container Launch
+            </button>
+          </div>
+        </form>
+      </Modal>
       <SectionCard title="Workspace">
         <dl className="flex flex-wrap gap-6 text-slate-700">
           <div className="min-w-40">
@@ -808,6 +965,17 @@ function WorkspaceDetailPage() {
           >
             {containerActionLabel}
           </button>
+          {openLinks.map((link) => (
+            <button
+              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={submitting}
+              key={link.name}
+              onClick={() => window.open(link.url, "_blank", "noopener,noreferrer")}
+              type="button"
+            >
+              Open {link.name}
+            </button>
+          ))}
           <button
             className="rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={submitting}

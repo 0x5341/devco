@@ -2,7 +2,7 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
-import type { ProjectsMap } from "./lib/types";
+import type { AppConfig, ProjectsMap, WorkspaceOpenLinks } from "./lib/types";
 
 const seedProjects: ProjectsMap = {
   alpha: {
@@ -22,30 +22,77 @@ const seedProjects: ProjectsMap = {
   },
 };
 
+const pluginConfig: AppConfig = {
+  Plugins: {
+    admin: {
+      Features: {},
+      Links: {
+        Dashboard: {
+          Port: 8080,
+          Path: "/admin",
+        },
+        Hidden: {
+          Port: 0,
+          Path: "internal",
+        },
+      },
+    },
+    docs: {
+      Features: {},
+      Links: {
+        Docs: {
+          Port: 3000,
+          Path: "guide/index.html",
+        },
+      },
+    },
+  },
+};
+
 type Call = {
   method: string;
   url: string;
+  body?: Record<string, unknown>;
 };
 
 function cloneProjects(projects: ProjectsMap): ProjectsMap {
   return JSON.parse(JSON.stringify(projects)) as ProjectsMap;
 }
 
-function parseBody(init: RequestInit | undefined): Record<string, string> {
+function parseBody(init: RequestInit | undefined): Record<string, unknown> {
   if (!init?.body || typeof init.body !== "string") {
     return {};
   }
-  return JSON.parse(init.body) as Record<string, string>;
+  return JSON.parse(init.body) as Record<string, unknown>;
 }
 
-function setupFetchMock(initial: ProjectsMap): Call[] {
+function collectOpenLinks(config: AppConfig, selectedPlugins: string[]): WorkspaceOpenLinks {
+  const links: WorkspaceOpenLinks = {};
+  for (const pluginName of selectedPlugins) {
+    Object.assign(links, config.Plugins[pluginName]?.Links ?? {});
+  }
+  return links;
+}
+
+function clearCookies() {
+  for (const entry of document.cookie.split(";")) {
+    const [name] = entry.split("=");
+    if (!name?.trim()) {
+      continue;
+    }
+    document.cookie = `${name.trim()}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+  }
+}
+
+function setupFetchMock(initial: ProjectsMap, config: AppConfig = pluginConfig): Call[] {
   const calls: Call[] = [];
   const store = cloneProjects(initial);
 
   const mock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input.toString();
     const method = init?.method ?? "GET";
-    calls.push({ method, url });
+    const body = parseBody(init);
+    calls.push({ method, url, body: Object.keys(body).length === 0 ? undefined : body });
 
     if (url === "/api/project" && method === "GET") {
       return new Response(JSON.stringify(store), {
@@ -54,10 +101,17 @@ function setupFetchMock(initial: ProjectsMap): Call[] {
       });
     }
 
+    if (url === "/api/config" && method === "GET") {
+      return new Response(JSON.stringify(config), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
     if (url === "/api/project" && method === "POST") {
-      const body = parseBody(init);
-      store[body.Name] = {
-        Path: body.Path,
+      const projectName = String(body.Name);
+      store[projectName] = {
+        Path: String(body.Path),
         Workspaces: {},
       };
       return new Response(null, { status: 200 });
@@ -72,13 +126,15 @@ function setupFetchMock(initial: ProjectsMap): Call[] {
     }
 
     if (url === "/api/workspace" && method === "POST") {
-      const body = parseBody(init);
-      const project = store[body.ProjectName];
+      const projectName = String(body.ProjectName);
+      const workspaceName = String(body.WorkspaceName);
+      const branchName = typeof body.BranchName === "string" ? body.BranchName : "";
+      const project = store[projectName];
       if (project) {
-        project.Workspaces[body.WorkspaceName] = {
+        project.Workspaces[workspaceName] = {
           State: "beforeStart",
-          BranchName: body.BranchName || `devco/${body.WorkspaceName}`,
-          Path: `/worktree/${body.ProjectName}/${body.WorkspaceName}`,
+          BranchName: branchName || `devco/${workspaceName}`,
+          Path: `/worktree/${projectName}/${workspaceName}`,
           ContainerId: "",
           ComposeProjectName: "",
           RemoteUser: "",
@@ -100,21 +156,38 @@ function setupFetchMock(initial: ProjectsMap): Call[] {
     }
 
     if (url === "/api/workspace/launch" && method === "POST") {
-      const body = parseBody(init);
-      const workspace = store[body.ProjectName]?.Workspaces[body.WorkspaceName];
+      const projectName = String(body.ProjectName);
+      const workspaceName = String(body.WorkspaceName);
+      const plugins = Array.isArray(body.Plugins)
+        ? body.Plugins.filter((value): value is string => typeof value === "string")
+        : [];
+      const workspace = store[projectName]?.Workspaces[workspaceName];
       if (workspace) {
         workspace.State = "running";
+        workspace.OpenLinks = collectOpenLinks(config, plugins);
       }
       return new Response(null, { status: 200 });
     }
 
     if (url === "/api/workspace/down" && method === "POST") {
-      const body = parseBody(init);
-      const workspace = store[body.ProjectName]?.Workspaces[body.WorkspaceName];
+      const projectName = String(body.ProjectName);
+      const workspaceName = String(body.WorkspaceName);
+      const workspace = store[projectName]?.Workspaces[workspaceName];
       if (workspace) {
         workspace.State = "stopped";
       }
       return new Response(null, { status: 200 });
+    }
+
+    if (url.startsWith("/api/workspace/openlink?") && method === "GET") {
+      const parsed = new URL(url, "http://localhost");
+      const pjname = parsed.searchParams.get("pjname");
+      const wsname = parsed.searchParams.get("wsname");
+      const links = pjname && wsname ? store[pjname]?.Workspaces[wsname]?.OpenLinks ?? {} : {};
+      return new Response(JSON.stringify(links), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
     return new Response(`unexpected request: ${method} ${url}`, { status: 500 });
@@ -126,10 +199,13 @@ function setupFetchMock(initial: ProjectsMap): Call[] {
 
 beforeEach(() => {
   window.history.pushState({}, "", "/projects");
+  clearCookies();
 });
 
 afterEach(() => {
   cleanup();
+  clearCookies();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -331,9 +407,10 @@ describe("App browser flows", () => {
     expect(calls.some((call) => call.method === "DELETE" && call.url.includes("/api/workspace?pjname=alpha&wsname=ws-new"))).toBe(true);
   });
 
-  it("uses single container action button and switches label after launch", async () => {
+  it("opens a launch popup, submits selected plugins, fetches open links, and restores the selection on relaunch", async () => {
     const calls = setupFetchMock(seedProjects);
     const user = userEvent.setup();
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
     window.history.pushState({}, "", "/projects/alpha/workspaces/ws-a1");
 
     render(<App />);
@@ -341,8 +418,42 @@ describe("App browser flows", () => {
     await screen.findByText("Workspace: ws-a1");
     expect(screen.queryByRole("button", { name: "Container Down" })).toBeNull();
     await user.click(screen.getByRole("button", { name: "Container Launch" }));
+    const dialog = await screen.findByRole("dialog", { name: /launch container/i });
+    expect(calls.some((call) => call.method === "POST" && call.url === "/api/workspace/launch")).toBe(false);
+
+    await user.click(within(dialog).getByRole("checkbox", { name: "admin" }));
+    await user.click(within(dialog).getByRole("checkbox", { name: "docs" }));
+    await user.click(within(dialog).getByRole("button", { name: "Container Launch" }));
+
     await screen.findByRole("button", { name: "Container Down" });
     expect(screen.queryByRole("button", { name: "Container Launch" })).toBeNull();
+    await screen.findByRole("button", { name: "Open Dashboard" });
+    expect(screen.getByRole("button", { name: "Open Docs" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Open Hidden" })).toBeNull();
+
+    const launchCall = calls.find((call) => call.method === "POST" && call.url === "/api/workspace/launch");
+    expect(launchCall?.body?.ProjectName).toBe("alpha");
+    expect(launchCall?.body?.WorkspaceName).toBe("ws-a1");
+    expect(launchCall?.body?.Plugins).toEqual(["admin", "docs"]);
+    expect(
+      calls.some(
+        (call) => call.method === "GET" && call.url === "/api/workspace/openlink?pjname=alpha&wsname=ws-a1",
+      ),
+    ).toBe(true);
+
+    await user.click(screen.getByRole("button", { name: "Open Dashboard" }));
+    expect(openSpy).toHaveBeenCalledWith(
+      `${window.location.origin}/port/alpha/ws-a1/8080/admin`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Container Down" }));
+    await screen.findByRole("button", { name: "Container Launch" });
+    await user.click(screen.getByRole("button", { name: "Container Launch" }));
+    const relaunchDialog = await screen.findByRole("dialog", { name: /launch container/i });
+    expect((within(relaunchDialog).getByRole("checkbox", { name: "admin" }) as HTMLInputElement).checked).toBe(true);
+    expect((within(relaunchDialog).getByRole("checkbox", { name: "docs" }) as HTMLInputElement).checked).toBe(true);
 
     expect(calls.some((call) => call.method === "POST" && call.url === "/api/workspace/launch")).toBe(true);
   });
@@ -361,6 +472,34 @@ describe("App browser flows", () => {
     await user.click(screen.getByRole("button", { name: "Container Down" }));
 
     expect(calls.some((call) => call.method === "POST" && call.url === "/api/workspace/down")).toBe(true);
+  });
+
+  it("loads open link buttons when revisiting an already running workspace", async () => {
+    const runningProjects = cloneProjects(seedProjects);
+    runningProjects.alpha.Workspaces["ws-a1"].State = "running";
+    runningProjects.alpha.Workspaces["ws-a1"].OpenLinks = {
+      Docs: {
+        Port: 3000,
+        Path: "/docs",
+      },
+      Hidden: {
+        Port: 0,
+        Path: "internal",
+      },
+    };
+    const calls = setupFetchMock(runningProjects);
+    window.history.pushState({}, "", "/projects/alpha/workspaces/ws-a1");
+
+    render(<App />);
+
+    await screen.findByText("Workspace: ws-a1");
+    await screen.findByRole("button", { name: "Open Docs" });
+    expect(screen.queryByRole("button", { name: "Open Hidden" })).toBeNull();
+    expect(
+      calls.some(
+        (call) => call.method === "GET" && call.url === "/api/workspace/openlink?pjname=alpha&wsname=ws-a1",
+      ),
+    ).toBe(true);
   });
 
   it("shows Name/State/Branch in same card with horizontal summary row and hides extra fields", async () => {
